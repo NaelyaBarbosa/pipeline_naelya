@@ -64,3 +64,5 @@ def executar_diagnostico(comando_usuario):
     o comando informado pelo usuário — execução remota de código sem
     qualquer disfarce."""
     return os.popen(comando_usuario).read()
+modulos/.relatorios_vulneravel.py
+modulos/.cartoes_vulneravel.py
