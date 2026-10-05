@@ -15,7 +15,7 @@ def consultar_fatura(numero_cartao):
     """Consulta a fatura de um cartão usando query parametrizada."""
     conn = sqlite3.connect("cartoes.db")
     query = "SELECT fatura FROM cartoes WHERE numero = ?"
-    cursor = conn.execute(query, (numero_cartao,))
+    cursor.execute(query, (numero_cartao,))
     return cursor.fetchone()
 
 
