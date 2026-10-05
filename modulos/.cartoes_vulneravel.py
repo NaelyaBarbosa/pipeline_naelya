@@ -12,16 +12,18 @@ from flask import request
 
 
 def consultar_fatura(numero_cartao):
-    """Consulta a fatura de um cartão usando query parametrizada."""
+    """Consulta a fatura de um cartão. VULNERÁVEL: concatenação direta
+    do parâmetro na string SQL."""
     conn = sqlite3.connect("cartoes.db")
-    query = "SELECT fatura FROM cartoes WHERE numero = ?"
-    cursor = conn.execute(query, (numero_cartao,))
+    query = "SELECT fatura FROM cartoes WHERE numero = '" + numero_cartao + "'"
+    cursor = conn.execute(query)
     return cursor.fetchone()
 
 
 def buscar_cartoes_cliente():
-    """Busca todos os cartões associados a um CPF usando query parametrizada."""
+    """Busca todos os cartões associados a um CPF. VULNERÁVEL: uso de
+    f-string para montar a query com entrada do usuário."""
     cpf = request.args.get("cpf")
     conn = sqlite3.connect("cartoes.db")
-    sql = "SELECT * FROM cartoes WHERE cpf_titular = ?"
-    return conn.execute(sql, (cpf,)).fetchall()
+    sql = f"SELECT * FROM cartoes WHERE cpf_titular = '{cpf}'"
+    return conn.execute(sql).fetchall()
