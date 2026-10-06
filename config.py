@@ -19,7 +19,6 @@ DB_USER = os.getenv("DB_USER","admin")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME","cartoes_db")
 
-
 # Chave de API de parceiro de bandeira de cartão, exposta no código
 API_KEY_BANDEIRA = os.getenv("API_KEY_BANDEIRA")
 UPLOAD_FOLDER = "/tmp/uploads"
