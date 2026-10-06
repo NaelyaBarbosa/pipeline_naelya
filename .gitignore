@@ -1,68 +1,7 @@
 leaks.json
 semgrep-results.json
-"""
-Módulo de consulta de cartões do Simulador de Cartões de Crédito.
+app_vulneravel.py
+config_vulneravel.py
 
-Contém vulnerabilidades intencionais de SQL Injection: os parâmetros
-recebidos da requisição são concatenados diretamente na query SQL,
-sem uso de consultas parametrizadas (Prepared Statements).
-"""
-
-import sqlite3
-
-from flask import request
-
-
-def consultar_fatura(numero_cartao):
-    """Consulta a fatura de um cartão. VULNERÁVEL: concatenação direta
-    do parâmetro na string SQL."""
-    conn = sqlite3.connect("cartoes.db")
-    query = "SELECT fatura FROM cartoes WHERE numero = '" + numero_cartao + "'"
-    cursor = conn.execute(query)
-    return cursor.fetchone()
-
-
-def buscar_cartoes_cliente():
-    """Busca todos os cartões associados a um CPF. VULNERÁVEL: uso de
-    f-string para montar a query com entrada do usuário."""
-    cpf = request.args.get("cpf")
-    conn = sqlite3.connect("cartoes.db")
-    sql = f"SELECT * FROM cartoes WHERE cpf_titular = '{cpf}'"
-    return conn.execute(sql).fetchall()
-"""
-Módulo de geração de relatórios e extratos.
-
-Contém vulnerabilidades intencionais de Command Injection (uso de
-subprocess/os.popen com shell habilitado e entrada não sanitizada) e
-Path Traversal (montagem de caminho de arquivo a partir de entrada do
-usuário, sem validação).
-"""
-
-import os
-import subprocess
-
-
-def gerar_relatorio_pdf(formato):
-    """Gera um relatório em PDF chamando um script externo. VULNERÁVEL:
-    shell=True combinado com concatenação de string permite injeção de
-    comandos (ex.: formato='pdf; cat /etc/passwd')."""
-    comando = "gerar_pdf.sh " + formato
-    resultado = subprocess.run(comando, shell=True, capture_output=True)
-    return resultado.stdout
-
-
-def baixar_extrato(nome_arquivo):
-    """Lê um arquivo de extrato do disco. VULNERÁVEL: nenhuma validação
-    impede o uso de '../' para escapar do diretório de extratos."""
-    caminho = os.path.join("/var/extratos/", nome_arquivo)
-    with open(caminho, "r") as arquivo:
-        return arquivo.read()
-
-
-def executar_diagnostico(comando_usuario):
-    """Endpoint de diagnóstico interno. VULNERÁVEL: executa diretamente
-    o comando informado pelo usuário — execução remota de código sem
-    qualquer disfarce."""
-    return os.popen(comando_usuario).read()
 modulos/.relatorios_vulneravel.py
 modulos/.cartoes_vulneravel.py
