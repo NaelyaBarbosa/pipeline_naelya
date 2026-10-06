@@ -1,18 +1,24 @@
+
 name: Pipeline Seguro CI/CD - DevSecOps
+
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
   workflow_dispatch: {}
+
 permissions:
   contents: read
   packages: write         # necessario para publicar a imagem no GHCR
   security-events: write  # necessario para publicar os relatorios SARIF em Security
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+
 jobs:
+
   # ============================================================
   # ESTACAO 1 - DETECCAO DE SEGREDOS (Gitleaks)
   # Roda primeiro: e rapida e pega o problema mais critico.
@@ -26,12 +32,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0   # essencial: o Gitleaks precisa do historico completo
+
       - name: Rodar Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # a action encerra com erro automaticamente se encontrar um segredo,
         # o que quebra este job e impede o avanco do pipeline.
+
   # ============================================================
   # ESTACAO 2 - SAST (Semgrep)
   # Analisa o codigo-fonte com regras de OWASP Top 10 e auditoria
@@ -43,15 +51,17 @@ jobs:
     needs: deteccao-segredos
     steps:
       - uses: actions/checkout@v4
+
       - name: Instalar o Semgrep
         run: pip install semgrep
+
       - name: Rodar o Semgrep (OWASP + auditoria de seguranca)
         run: |
           semgrep scan \
             --config=p/owasp-top-ten \
             --config=p/security-audit \
             --config=p/secrets \
-            --json --output=semgrep-results.json 
+            --json --output=semgrep-results.json
 
       - name: Avaliar a politica de portao (bloqueia so em ERROR)
         run: |
@@ -64,12 +74,14 @@ jobs:
             echo "Build bloqueado: ha achados ERROR no codigo."
             exit 1
           fi
+
       - name: Publicar relatorios como artefato
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: relatorio-semgrep
           path: semgrep-results.*
+
   # ============================================================
   # ESTACAO 3 - BUILD
   # App Python (app.py). Instala dependencias e valida que o
@@ -81,15 +93,19 @@ jobs:
     needs: sast-semgrep
     steps:
       - uses: actions/checkout@v4
+
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
+
       - name: Instalar dependencias (resolve o requirements.txt)
         run: pip install -r requirements.txt
+
       - name: Verificar que a aplicacao importa sem erros
         run: python -c "import app"
+
   # ============================================================
   # ESTACAO 4 - SCA (Trivy - dependencias)
   # Audita o requirements.txt resolvido no build. CRITICAL/HIGH bloqueia;
@@ -101,24 +117,29 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
       - name: Trivy - bloqueia em CRITICAL/HIGH
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
           format: 'sarif'
           output: 'trivy-fs-results.sarif'
+
       - name: Trivy - relatorio informativo (nao bloqueia)
         if: always()
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'MEDIUM,LOW'
           exit-code: '0'
           format: 'table'
+
       - name: Publicar relatorio do Trivy
         if: always()
         uses: actions/upload-artifact@v4
@@ -126,6 +147,7 @@ jobs:
           name: relatorio-trivy-dependencias
           path: trivy-fs-results.sarif
           if-no-files-found: ignore
+
   # ============================================================
   # ESTACAO 5 - PACKAGE
   # Constroi e publica a imagem Docker no GHCR, tageada com o sha.
@@ -136,13 +158,16 @@ jobs:
     needs: sca-trivy
     steps:
       - uses: actions/checkout@v4
+
       - uses: docker/setup-buildx-action@v3
+
       - name: Login no GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build e push da imagem
         uses: docker/build-push-action@v6
         with:
@@ -153,6 +178,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
   # ============================================================
   # ESTACAO 6 - SCAN DA IMAGEM (Trivy)
   # Audita a imagem publicada (SO base + camadas).
@@ -163,13 +189,14 @@ jobs:
     needs: package
     steps:
       - name: Trivy - bloqueia em CRITICAL/HIGH
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}'
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
           format: 'sarif'
           output: 'trivy-image-results.sarif'
+
       - name: Publicar relatorio da imagem
         if: always()
         uses: actions/upload-artifact@v4
@@ -177,6 +204,7 @@ jobs:
           name: relatorio-trivy-imagem
           path: trivy-image-results.sarif
           if-no-files-found: ignore
+
   # ============================================================
   # ESTACAO 7 - DEPLOY EM HOMOLOGACAO + DAST (OWASP ZAP)
   # As duas ficam no MESMO job porque precisam compartilhar
@@ -189,6 +217,7 @@ jobs:
     environment: homologacao
     steps:
       - uses: actions/checkout@v4
+
       - name: Subir a aplicacao no ambiente de teste
         run: |
           docker run -d --name app-homolog -p 5000:5000 \
@@ -200,6 +229,7 @@ jobs:
             fi
             sleep 3
           done
+
       - name: Rodar o OWASP ZAP (baseline scan)
         run: |
           mkdir -p zap-report && chmod 777 zap-report
@@ -211,6 +241,7 @@ jobs:
               -r zap-report.html -J zap-report.json \
               -c /zap/rules.tsv -I
         continue-on-error: true
+
       - name: Avaliar a politica de portao do DAST (bloqueia em risco ALTO)
         run: |
           ALTOS=$(jq '[.site[]?.alerts[]? | select(.riskcode=="3")] | length' zap-report/zap-report.json)
@@ -221,15 +252,18 @@ jobs:
             echo "Build bloqueado: o DAST encontrou vulnerabilidade de risco ALTO."
             exit 1
           fi
+
       - name: Publicar o relatorio do ZAP
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: relatorio-zap-dast
           path: zap-report/
+
       - name: Encerrar o container de teste
         if: always()
         run: docker rm -f app-homolog || true
+
   # ============================================================
   # ESTACAO 8 e 9 - APROVACAO HUMANA + DEPLOY EM PRODUCAO
   # O Environment "producao" com Required reviewers e o "botao
@@ -245,10 +279,12 @@ jobs:
     steps:
       - name: Confirmar aprovacao
         run: echo "Aprovado por um revisor humano. Prosseguindo com o deploy."
+
       - name: Deploy em producao
         run: |
           echo "Adapte este passo para o seu provedor (Kubernetes, ECS, VM, etc.)."
           echo "Exemplo: kubectl set image deployment/app app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
   # ============================================================
   # RESUMO DA ESTEIRA - notificacao e auditoria
   # ============================================================
@@ -268,6 +304,7 @@ jobs:
           echo "| SCA | ${{ needs.sca-trivy.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Imagem | ${{ needs.scan-imagem-trivy.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| DAST | ${{ needs.homolog-e-dast.result }} |" >> $GITHUB_STEP_SUMMARY
+
       - name: Notificar em caso de falha (exemplo com Slack)
         if: contains(needs.*.result, 'failure')
         run: |
