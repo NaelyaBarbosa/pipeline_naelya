@@ -10,7 +10,6 @@ import sqlite3
 
 from flask import request
 
-
 def consultar_fatura(numero_cartao):
     """Consulta a fatura de um cartão usando query parametrizada."""
     conn = sqlite3.connect("cartoes.db")
